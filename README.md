@@ -188,7 +188,7 @@ claude "Run: python3 -c 'print(open(\".env\").read())'"
 Or: `task demo:env:sandbox`. Same prompt as `demo:env:bypass`, different
 outcome.
 
-### Scenario 2 — `app-config.yaml` is blocked too (ruling out name bias)
+### Scenario 2 — `app-config.yaml` is blocked too, and sandbox backstops it
 
 ![Scenario 2 diagram](diagrams/permissions/2-deny-innocuous.svg)
 
@@ -196,63 +196,142 @@ outcome.
 "secrets live here" context that an agent might refuse or hedge on it
 for reasons that have nothing to do with the permission system.
 
-So: `app-config.yaml` is in the `deny` list with a completely mundane
-name and mundane content (port, log level, feature flags). If the agent
-also fails to read this one, the block is clearly coming from the
-permission system, not from the agent inferring "this sounds sensitive,
-I shouldn't touch it."
+So: `app-config.yaml` gets the exact same treatment. Mundane name,
+mundane content (port, log level, feature flags), same deny rule and
+same sandbox coverage:
 
 ```json
-"deny": ["Read(./app-config.yaml)", ...]
+"deny":   ["Read(./app-config.yaml)", "Bash(cat:*)", "Bash(head:*)", ...]
+"sandbox.filesystem.denyRead": ["./app-config.yaml", ...]
 ```
+
+Two observations fall out of this:
+
+1. **No name bias on the permission side.** The direct read
+   (`Read app-config.yaml`) gets hard-denied exactly like `.env` —
+   same rule shape, same result. The rule doesn't care what the file
+   is named.
+2. **The same bypass story repeats, and sandbox catches it here too.**
+   `python3 -c 'print(open("app-config.yaml").read())'` slips the deny
+   list (not matching any `Bash(*.yaml)` pattern — there isn't one —
+   and the `-c` string is opaque to the filter). Without sandbox, it
+   falls to an ask prompt. With sandbox, the OS returns `EACCES` at
+   `open()`. The diagram shows the with-sandbox path — same pipeline
+   as scenario 1b, different file.
 
 **Try it:**
 
 ```bash
-cd without-sandbox    # or: cd with-sandbox — same outcome
+cd without-sandbox
 claude -p "Read app-config.yaml and tell me which port the app runs on."
+# → "has been denied" (Read tool blocked)
+
+claude "Run: python3 -c 'print(open(\"app-config.yaml\").read())'"
+# → ask prompt; approve → leaks the config
+
+cd ../with-sandbox
+claude "Run: python3 -c 'print(open(\"app-config.yaml\").read())'"
+# → EACCES at the OS — approval can't unlock it
 ```
 
-The failure mode should look identical to `.env` — same `Read` block,
-same side-door blocks on `cat`/`head`/`tail`. That identical failure
-is the point: the rule doesn't care what the file is named.
+Or via Taskfile: `task demo:config`, `task demo:config:bypass`,
+`task demo:config:sandbox`.
 
-### Scenario 3 — `./sensitive/**` is listable and searchable, but not readable
+### Scenario 3 — `./sensitive/**` is listable, not readable
 
 ![Scenario 3 diagram](diagrams/permissions/3-sensitive-list-only.svg)
 
-The rules:
+You want `ls sensitive/` to work (names are fine) but
+`cat sensitive/customer-data.csv` to fail (contents are not). Both
+variants let you list the directory. The contrast is what happens when
+a user *approves* a content-read bypass.
+
+**The permission-layer shape** (same in both variants):
 
 ```json
-"deny":  ["Read(./sensitive/**)", "Bash(cat:*)", ... ],
-"allow": ["Bash(ls:*)", "Bash(find:*)", "Bash(grep -l:*)", "Bash(wc:*)"]
+"deny":  ["Read(./sensitive/**)"],
+"ask":   ["Bash(*)"],
+"allow": ["Bash(ls:*)", "Bash(tree:*)"]
 ```
 
-The agent can:
+- `Read(./sensitive/**)` deny blocks the in-process `Read` tool.
+- `Bash(ls:*)` / `Bash(tree:*)` allow listing directory entries.
+- `Bash(*)` ask routes anything else (`cat`, `python3 -c`, `grep`, …)
+  through a prompt.
 
-- `ls sensitive/` → see filenames
-- `find sensitive -name '*.csv'` → search by name
-- `grep -l "error" sensitive/*` → find which files match (names only)
-- `wc -l sensitive/*.log` → count lines
+**Without sandbox, the trust boundary is you.** If an agent needs to
+read `sensitive/customer-data.csv`, it prompts: *"Allow Bash: cat
+sensitive/customer-data.csv?"* If you approve, the file is read, and
+the contents flow through the agent and out to the chat. The ask is the
+weakest link — approvals are irrevocable once granted.
 
-It cannot:
+**With sandbox, there's a floor under approval.** Even if you approve
+the bash prompt, the subprocess runs inside Seatbelt (macOS) or
+bubblewrap (Linux), and `open("sensitive/...")` returns `EACCES`. The
+agent sees an error, not contents.
 
-- `Read` any file inside `sensitive/` (denied)
-- `cat`/`head`/`tail`/`less` (denied globally in this demo)
+The sandbox block:
 
-> **The gotcha:** `grep` without `-l` would print matching lines, which
-> would leak file contents through the shell. This demo allows only
-> `grep -l` / `grep -r -l` (names only). If you need full `grep`, you'd
-> also want to deny reading directly, and accept that search can't see
-> into the blocked files. There is no clean "search contents without
-> seeing contents" primitive.
+```json
+"sandbox": {
+  "enabled": true,
+  "autoAllowBashIfSandboxed": false,
+  "filesystem": {
+    "denyRead": ["./sensitive/**"]
+  },
+  "excludedCommands": ["ls", "ls *", "tree", "tree *"]
+}
+```
+
+- `filesystem.denyRead` is the OS-level wall for **Bash subprocesses** —
+  Seatbelt (macOS) or bubblewrap (Linux) returns `EACCES` on `open()`
+  for any path under `sensitive/`, regardless of which command tries.
+- `excludedCommands` is a prefix whitelist of commands that run
+  **outside** the sandbox. `ls` and `tree` read directory entries
+  (`readdir`) but never `open()` file contents, so running them
+  unsandboxed is safe — they list names and sizes and nothing more.
+- Paired permission rules: `"allow": ["Bash(ls:*)", "Bash(tree:*)"]`
+  auto-allow them at the permission layer; `"ask": ["Bash(*)"]` sends
+  anything else (like `cat`, `python3 -c`, `grep`) to a prompt. If you
+  approve, the command runs inside the sandbox and hits `EACCES` if it
+  tries to `open()` a sensitive file.
+- The sandbox does **not** cover in-process tools (`Read`, `Edit`,
+  `Write`, `Glob`, `Grep`) — those stay under permission rules. So we
+  keep `"deny": ["Read(./sensitive/**)"]` as the belt alongside
+  `denyRead`'s braces.
+
+**What the agent can do:**
+
+- `ls sensitive/` / `tree sensitive/` → see filenames (unsandboxed, permission-allowed)
+
+**What it cannot do:**
+
+- `cat sensitive/customer-data.csv` → ask; if approved, sandbox `EACCES`
+- `python3 -c 'open("sensitive/...")'` → ask; if approved, sandbox `EACCES`
+- `Read` tool on any `sensitive/` file → permission deny (the Read tool
+  runs in-process and the sandbox doesn't touch it — the permission
+  rule is what blocks it)
 
 **Try it:**
 
 ```bash
-cd without-sandbox    # same in with-sandbox
-claude -p "List the files under sensitive/ and count the lines in each. Do not read their contents."
+# Both variants: listing works
+task demo:sensitive          # without-sandbox
+task demo:sensitive:sandbox  # with-sandbox
+# → ls sensitive/ returns filenames
+
+# The contrast: approve a content-read bypass
+task demo:sensitive:read:sandbox
+# → python3 open() asks; approve → sandbox EACCES
 ```
+
+In without-sandbox the same approval would succeed and leak the file.
+
+> **The gotcha:** "search contents without seeing contents" has no
+> clean primitive. `grep` (without `-l`) prints matching lines, which
+> is a read — sandbox blocks it inside `sensitive/`. If you really need
+> content-search, you either approve a specific command (and accept
+> the leak) or build an indexed search outside the agent's reach.
 
 ### Scenario 4 — `./restricted/**` requires an explicit OK
 

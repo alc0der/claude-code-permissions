@@ -46,28 +46,43 @@ tasks:
       - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\".env\").read())''"'
 
   demo:config:
-    desc: "Scenario 2 — try to read app-config.yaml (blocked, same rule shape)"
+    desc: "Scenario 2 — direct read of app-config.yaml blocked at permissions"
     dir: without-sandbox
     cmds:
       - claude -p "Read app-config.yaml and tell me which port the app runs on."
+
+  demo:config:bypass:
+    desc: "Scenario 2 (no sandbox) — same python slip works for app-config.yaml"
+    dir: without-sandbox
+    interactive: true
+    cmds:
+      - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\"app-config.yaml\").read())''"'
 
   demo:config:sandbox:
-    desc: "Scenario 2 (sandbox on) — same deny, plus OS-level denyRead"
+    desc: "Scenario 2 (sandbox on) — python slip on app-config.yaml gets EACCES'd too"
     dir: with-sandbox
+    interactive: true
     cmds:
-      - claude -p "Read app-config.yaml and tell me which port the app runs on."
+      - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\"app-config.yaml\").read())''"'
 
   demo:sensitive:
-    desc: "Scenario 3 — list sensitive/ without reading contents"
+    desc: "Scenario 3 (no sandbox) — ls sensitive/ works via allow rule"
     dir: without-sandbox
     cmds:
-      - claude -p "List the files under sensitive/ and count the lines in each. Do not read their contents."
+      - claude -p "List the files under sensitive/. Do not read their contents."
 
   demo:sensitive:sandbox:
-    desc: "Scenario 3 (sandbox on) — list-only still works; read is OS-blocked"
+    desc: "Scenario 3 (sandbox on) — ls/tree excluded from sandbox; list still works"
     dir: with-sandbox
     cmds:
-      - claude -p "List the files under sensitive/ and count the lines in each. Do not read their contents."
+      - claude -p "List the files under sensitive/. Do not read their contents."
+
+  demo:sensitive:read:sandbox:
+    desc: "Scenario 3 (sandbox on) — same dir, reading contents gets EACCES'd"
+    dir: with-sandbox
+    interactive: true
+    cmds:
+      - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\"sensitive/customer-data.csv\").read())''"'
 
   demo:restricted:
     desc: "Scenario 4 — ask prompt for restricted/ (interactive)"

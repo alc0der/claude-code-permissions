@@ -9,37 +9,23 @@
       "Bash(*.env)",
       "Bash(* .env *)",
       "Read(./app-config.yaml)",
-      "Read(./sensitive/**)",
-      "Bash(cat:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(less:*)",
-      "Bash(more:*)",
-      "Bash(bat:*)",
-      "Bash(xxd:*)",
-      "Bash(strings:*)",
-      "Bash(od:*)"
+      "Read(./sensitive/**)"
     ],
     "ask": [
-      "Read(./restricted/**)"
+      "Read(./restricted/**)",
+      "Bash(*)"
     ],
     "allow": [
       "Read(./public/**)",
       "Read(./README.md)",
       "Read(./.claude/settings.json)",
       "Bash(ls:*)",
-      "Bash(find:*)",
-      "Bash(tree:*)",
-      "Bash(wc:*)",
-      "Bash(file:*)",
-      "Bash(stat:*)",
-      "Bash(grep -l:*)",
-      "Bash(grep -r -l:*)"
+      "Bash(tree:*)"
     ]
   },
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true,
+    "autoAllowBashIfSandboxed": false,
     "filesystem": {
       "denyRead": [
         "./.env",
@@ -49,6 +35,12 @@
         "./app-config.yaml",
         "./sensitive/**"
       ]
-    }
+    },
+    "excludedCommands": [
+      "ls",
+      "ls *",
+      "tree",
+      "tree *"
+    ]
   }
 }

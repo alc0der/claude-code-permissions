@@ -128,7 +128,7 @@ scenarios: {
   2-deny-innocuous: {
     direction: right
     title: |md
-      # Scenario 2 — `app-config.yaml` denied the same way
+      # Scenario 2 — sandbox backstops `app-config.yaml` (same slip, no name bias)
     | {
       near: top-center
       shape: text
@@ -138,23 +138,39 @@ scenarios: {
 
     permissions.rules: |`json
       "deny": [
-        "Read(./app-config.yaml)"
+        "Read(./app-config.yaml)",
+        "Bash(cat:*)",
+        "Bash(head:*)"
       ]
     `|
 
-    sandbox.off: |md
-      *(no sandbox)*
-    |
-    sandbox.style.opacity: 0.35
+    sandbox.rules: |`json
+      "sandbox": {
+        "enabled": true,
+        "filesystem": {
+          "denyRead": [
+            "./app-config.yaml"
+          ]
+        }
+      }
+    `|
 
-    (u -> claude)[0]: "Read app-config.yaml and tell me which port the app runs on."
-    (claude -> permissions)[0]: "Read(./app-config.yaml)"
-    (permissions -> sandbox)[0]: "✗ matches deny" {
-      style.stroke: "#cc0000"
+    aside: |md
+      `python3 -c '...'` slips
+      the permission filter for
+      `app-config.yaml` just like
+      it did for `.env` — sandbox
+      catches it by path at the
+      `open()` syscall.
+    | {
+      shape: text
     }
-    (sandbox -> file)[0]: "not reached" {
-      style.stroke: "#cccccc"
-      style.animated: false
+
+    (u -> claude)[0]: "Run: python3 -c 'print(open(\"app-config.yaml\").read())'"
+    (claude -> permissions)[0]: "Bash: python3 -c ..."
+    (permissions -> sandbox)[0]: "✓ no match → passes"
+    (sandbox -> file)[0]: "✗ EACCES" {
+      style.stroke: "#cc0000"
     }
   }
 
@@ -173,21 +189,42 @@ scenarios: {
       "deny":  ["Read(./sensitive/**)"],
       "allow": [
         "Bash(ls:*)",
-        "Bash(find:*)",
-        "Bash(grep -l:*)",
-        "Bash(wc:*)"
-      ]
+        "Bash(tree:*)"
+      ],
+      "ask":   ["Bash(*)"]
     `|
 
-    sandbox.off: |md
-      *(no sandbox)*
-    |
-    sandbox.style.opacity: 0.35
+    sandbox.rules: |`json
+      "sandbox": {
+        "enabled": true,
+        "filesystem": {
+          "denyRead": ["./sensitive/**"]
+        },
+        "excludedCommands": [
+          "ls", "ls *",
+          "tree", "tree *"
+        ]
+      }
+    `|
 
-    (u -> claude)[0]: "List files under sensitive/ and count lines in each."
+    aside: |md
+      `ls`/`tree` are whitelisted
+      via `excludedCommands` —
+      they run **outside** the
+      sandbox, so `readdir` works.
+      A `cat`/`python3 -c` bypass
+      would be **asked**; even if
+      you approve, the subprocess
+      runs **inside** the sandbox
+      and hits `EACCES` on `open()`.
+    | {
+      shape: text
+    }
+
+    (u -> claude)[0]: "List files under sensitive/."
     (claude -> permissions)[0]: "Bash: ls sensitive/"
-    (permissions -> sandbox)[0]: "✓ matches allow"
-    (sandbox -> file)[0]: "✓ names + sizes"
+    (permissions -> sandbox)[0]: "✓ allow → excluded"
+    (sandbox -> file)[0]: "✓ names only"
   }
 
   4-restricted-ask: {
