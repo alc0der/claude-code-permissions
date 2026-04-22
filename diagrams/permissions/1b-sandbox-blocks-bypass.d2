@@ -1,3 +1,5 @@
+grid-columns: 3
+
 ...@../_shared
 ...@../_scenario-base
 
@@ -8,11 +10,10 @@ title: |md
   shape: text
 }
 
-
 prompt: "Run: python3 -c\n'print(open(\".env\").read())'"
 file: ".env"
 
-gate: {
+gate: OS sandbox catches what permissions miss {
   perm.rules: |`json
     "deny": [
       "Read(./.env)",
@@ -33,17 +34,7 @@ gate: {
     }
   `|
 
-  perm -> sand: "✓ no match → passes" { class: flow-edge }
-}
-
-aside: |md
-  python3 -c '...' isn't
-  matched by any deny rule.
-  Sandbox intercepts
-  open(".env") at the
-  syscall, returning EACCES.
-| {
-  shape: text
+  perm -> sand
 }
 
 prompt -> gate.perm: "Bash: python3 -c ..." { class: flow-edge }

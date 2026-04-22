@@ -6,20 +6,29 @@ vertical-gap: 100
 horizontal-gap: 120
 
 # Title row
-key-prompt: "How Claude Code\npermissions and sandbox\ncompliment each other?" {
-  class: title-callout
+key-prompt: |md
+# How Claude Code<br/>permissions and sandbox<br/>compliment each other?
+| {
+
 }
 key-gate: ".claude/settings.json" {
   direction: right
+  label.near: border-top-center
   class: header-outline
-  key-perm: "permissions\nsection" { class: [code-step; header-outline] }
-  key-sand: "sandbox\nsection" { class: [code-step; header-outline] }
+  key-perm: "\"permissions\":{\n\"deny\":[...]\n}" {
+    class: [code-step; header-outline]
+  }
+  key-sand: "\"sandbox\":{\n\"denyRead\":[...]\n}" {
+    class: [code-step; header-outline]
+  }
   key-perm -> key-sand
 }
-key-file: "by\nAhmad Akilan" { class: [target-file; header-outline] }
+key-file: |md
+## by<br/>Ahmad Akilan
+|
 
-key-prompt -> key-gate { class: flow-edge }
-key-gate.key-sand -> key-file
+# key-prompt -> key-gate { class: flow-edge }
+# key-gate.key-sand -> key-file
 
 # Scenario 1 — .env denied at permissions (no sandbox)
 u-1: @permissions/1-deny-env.prompt

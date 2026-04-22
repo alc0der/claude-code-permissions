@@ -1,3 +1,5 @@
+grid-columns: 3
+
 ...@../_shared
 ...@../_scenario-base
 
@@ -11,7 +13,7 @@ title: |md
 prompt: "Summarize\nrestricted/team-notes.md"
 file: "restricted/team-notes.md"
 
-gate: {
+gate: restricted/** requires your OK {
   perm.rules: |`json
     "ask": [
       "Read(./restricted/**)"
@@ -23,7 +25,7 @@ gate: {
   |
   sand.style.opacity: 0.35
 
-  perm -> sand: "? awaits approval" { style.stroke: "#cc9900" }
+  perm -> sand
 }
 
 prompt -> gate.perm: "Read(./restricted/team-notes.md)" { class: flow-edge }

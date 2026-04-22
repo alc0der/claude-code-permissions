@@ -1,3 +1,5 @@
+grid-columns: 3
+
 ...@../_shared
 ...@../_scenario-base
 
@@ -11,7 +13,7 @@ title: |md
 prompt: "List files\nunder sensitive/."
 file: "sensitive/customer-data.csv"
 
-gate: {
+gate: sensitive/** listable, not readable {
   perm.rules: |`json
     "deny":  ["Read(./sensitive/**)"],
     "allow": [
@@ -34,21 +36,7 @@ gate: {
     }
   `|
 
-  perm -> sand: "✓ allow → excluded" { class: flow-edge }
-}
-
-aside: |md
-  ls/tree are whitelisted
-  via excludedCommands.
-  They run outside the
-  sandbox, so readdir works.
-  A cat/python3 -c bypass
-  would be asked; even if
-  you approve, the subprocess
-  runs inside the sandbox
-  and hits EACCES on open().
-| {
-  shape: text
+  perm -> sand
 }
 
 prompt -> gate.perm: "Bash: ls sensitive/" { class: flow-edge }

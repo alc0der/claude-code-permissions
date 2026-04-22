@@ -1,3 +1,5 @@
+grid-columns: 3
+
 ...@../_shared
 ...@../_scenario-base
 
@@ -11,7 +13,7 @@ title: |md
 prompt: "Run: python3 -c\n'print(open(\"app-config.yaml\").read())'"
 file: "app-config.yaml"
 
-gate: {
+gate: sandbox backstops app-config.yaml (same slip, no name bias) {
   perm.rules: |`json
     "deny": [
       "Read(./app-config.yaml)",
@@ -31,18 +33,7 @@ gate: {
     }
   `|
 
-  perm -> sand: "✓ no match → passes" { class: flow-edge }
-}
-
-aside: |md
-  python3 -c '...' slips
-  the permission filter for
-  app-config.yaml just like
-  it did for .env. Sandbox
-  catches it by path at the
-  open() syscall.
-| {
-  shape: text
+  perm -> sand
 }
 
 prompt -> gate.perm: "Bash: python3 -c ..." { class: flow-edge }
