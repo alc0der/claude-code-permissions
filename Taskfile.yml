@@ -65,12 +65,6 @@ tasks:
     cmds:
       - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\"app-config.yaml\").read())''"'
 
-  demo:sensitive:
-    desc: "Scenario 3 (no sandbox) — ls sensitive/ works via allow rule"
-    dir: without-sandbox
-    cmds:
-      - claude -p "List the files under sensitive/. Do not read their contents."
-
   demo:sensitive:sandbox:
     desc: "Scenario 3 (sandbox on) — ls/tree excluded from sandbox; list still works"
     dir: with-sandbox

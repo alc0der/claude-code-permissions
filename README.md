@@ -40,14 +40,19 @@ Rules are patterns shaped like `ToolName(specifier)`:
 
 ## The scenarios
 
-Each scenario has a runnable command. Hit ▶ in your IDE, copy into a shell
-(from the right subdir), or run the `task demo:<name>` shortcut — the
-Taskfile tasks handle the `cd` for you. `task` with no args lists
-everything.
+Each scenario has a runnable command you can copy into a shell. `cd` into
+the right subdirectory first — that's what selects the settings file.
 
 ### Scenario 1 — `.env` can never be read
 
 ![Scenario 1 diagram](diagrams/permissions/1-deny-env.svg)
+
+You're pair-programming with Claude on a production service. The repo has
+`.env` files with database passwords, Stripe keys, third-party API
+tokens — the kind of secrets that, if they ever leaked into a chat
+transcript, mean rotating credentials and writing incident notes. You
+want Claude to refactor the code that *uses* those values, not to ever
+see them.
 
 Two layers of `deny` protect `.env`:
 
@@ -132,13 +137,16 @@ claude "Run: python3 -c 'print(open(\".env\").read())'"
 # → interactive prompt; approve and .env leaks
 ```
 
-Or via Taskfile: `task demo:env` (direct read),
-`task demo:env:old-bypass` (the awk form, now caught), and
-`task demo:env:bypass` (the Python slip).
-
 ### Scenario 1b — sandbox is the real fix
 
 ![Scenario 1b diagram](diagrams/permissions/1b-sandbox-blocks-bypass.svg)
+
+Same `.env`, same stakes. But now you've seen scenario 1 and know that
+permission patterns can't see inside `python3 -c '...'` or `perl -e`.
+You don't want to rely on yourself to say "no" to every bypass prompt,
+especially an hour into a debugging session when you're fast-approving
+things. You want the answer to be "the OS won't let me" regardless of
+what you click.
 
 `with-sandbox/.claude/settings.json` adds a `sandbox` block:
 
@@ -185,12 +193,15 @@ claude "Run: python3 -c 'print(open(\".env\").read())'"
 # → EACCES at the OS — approval can't unlock it
 ```
 
-Or: `task demo:env:sandbox`. Same prompt as `demo:env:bypass`, different
-outcome.
-
 ### Scenario 2 — `app-config.yaml` is blocked too, and sandbox backstops it
 
 ![Scenario 2 diagram](diagrams/permissions/2-deny-innocuous.svg)
+
+You have an internal config that isn't secret-secret, but also isn't
+something you want broadcast back into a chat transcript: feature
+flags, A/B cohort assignments, pricing tier definitions, rate limits,
+third-party vendor endpoints. A name like `app-config.yaml` doesn't
+scream "protect me" the way `.env` does — and that's exactly the test.
 
 `.env` is a bad test on its own. The string ".env" carries so much
 "secrets live here" context that an agent might refuse or hedge on it
@@ -234,43 +245,27 @@ claude "Run: python3 -c 'print(open(\"app-config.yaml\").read())'"
 # → EACCES at the OS — approval can't unlock it
 ```
 
-Or via Taskfile: `task demo:config`, `task demo:config:bypass`,
-`task demo:config:sandbox`.
-
-### Scenario 3 — `./sensitive/**` is listable, not readable
+### Scenario 3 — let Claude organize a folder without peeking inside
 
 ![Scenario 3 diagram](diagrams/permissions/3-sensitive-list-only.svg)
 
-You want `ls sensitive/` to work (names are fine) but
-`cat sensitive/customer-data.csv` to fail (contents are not). Both
-variants let you list the directory. The contrast is what happens when
-a user *approves* a content-read bypass.
+You want Claude to tidy up your personal journal directory: move files
+into subfolders by year, rename scanned PDFs to match their dated
+contents, dedupe. It needs to see filenames and sizes. It must never
+`open()` a file. Names are safe; contents are yours alone.
 
-**The permission-layer shape** (same in both variants):
+This is an interesting shape for the permission system because there's
+no clean primitive for "list names, block contents." You can't express
+it with permission rules alone: any bash command you *approve*
+(`cat`, `grep`, `python3 -c`) will happily `open()` a file. Permissions
+can't draw a floor under your own approval.
 
-```json
-"deny":  ["Read(./sensitive/**)"],
-"ask":   ["Bash(*)"],
-"allow": ["Bash(ls:*)", "Bash(tree:*)"]
-```
-
-- `Read(./sensitive/**)` deny blocks the in-process `Read` tool.
-- `Bash(ls:*)` / `Bash(tree:*)` allow listing directory entries.
-- `Bash(*)` ask routes anything else (`cat`, `python3 -c`, `grep`, …)
-  through a prompt.
-
-**Without sandbox, the trust boundary is you.** If an agent needs to
-read `sensitive/customer-data.csv`, it prompts: *"Allow Bash: cat
-sensitive/customer-data.csv?"* If you approve, the file is read, and
-the contents flow through the agent and out to the chat. The ask is the
-weakest link — approvals are irrevocable once granted.
-
-**With sandbox, there's a floor under approval.** Even if you approve
-the bash prompt, the subprocess runs inside Seatbelt (macOS) or
-bubblewrap (Linux), and `open("sensitive/...")` returns `EACCES`. The
-agent sees an error, not contents.
-
-The sandbox block:
+**The sandbox draws it.** On macOS (Seatbelt) or Linux (bubblewrap),
+`filesystem.denyRead` is an OS-level wall: subprocesses can't `open()`
+paths under `sensitive/` no matter which command tries. `ls` and `tree`
+run *outside* the sandbox via `excludedCommands` — they call
+`readdir()` to enumerate directory entries, never `open()` to read file
+contents, so running them unsandboxed is safe.
 
 ```json
 "sandbox": {
@@ -283,22 +278,37 @@ The sandbox block:
 }
 ```
 
-- `filesystem.denyRead` is the OS-level wall for **Bash subprocesses** —
-  Seatbelt (macOS) or bubblewrap (Linux) returns `EACCES` on `open()`
-  for any path under `sensitive/`, regardless of which command tries.
-- `excludedCommands` is a prefix whitelist of commands that run
-  **outside** the sandbox. `ls` and `tree` read directory entries
-  (`readdir`) but never `open()` file contents, so running them
-  unsandboxed is safe — they list names and sizes and nothing more.
-- Paired permission rules: `"allow": ["Bash(ls:*)", "Bash(tree:*)"]`
-  auto-allow them at the permission layer; `"ask": ["Bash(*)"]` sends
-  anything else (like `cat`, `python3 -c`, `grep`) to a prompt. If you
-  approve, the command runs inside the sandbox and hits `EACCES` if it
-  tries to `open()` a sensitive file.
-- The sandbox does **not** cover in-process tools (`Read`, `Edit`,
-  `Write`, `Glob`, `Grep`) — those stay under permission rules. So we
-  keep `"deny": ["Read(./sensitive/**)"]` as the belt alongside
-  `denyRead`'s braces.
+Paired permission rules:
+
+```json
+"deny":  ["Read(./sensitive/**)"],
+"allow": ["Bash(ls:*)", "Bash(tree:*)"],
+"ask":   ["Bash(*)"]
+```
+
+- `Read(./sensitive/**)` deny blocks Claude's in-process `Read` tool.
+  The sandbox only wraps Bash subprocesses — in-process tools (`Read`,
+  `Edit`, `Write`, `Glob`, `Grep`) don't go through Seatbelt/bubblewrap.
+  The permission rule is what covers them.
+- `Bash(ls:*)` / `Bash(tree:*)` auto-allow the listing commands at the
+  permission layer; `excludedCommands` lets the same commands bypass
+  the sandbox. Both allow-lists are needed: the first keeps them from
+  being asked, the second keeps them from being sandboxed.
+- `Bash(*)` sends anything else (`cat`, `python3 -c`, `grep`) to an
+  ask prompt. **If you approve, the subprocess still runs inside the
+  sandbox** and hits `EACCES` on `open()`. Approval can't unlock the
+  file — the sandbox is a floor under your own mistakes.
+
+**Why there's no without-sandbox variant of this scenario.** You could
+write the same permission rules (`ls`/`tree` allow, `Bash(*)` ask) in
+a permissions-only setup. Listing would still work. But the moment you
+approve `cat sensitive/journal-2026.md` — because it looks harmless, or
+because you're tired, or because a prompt-injected file told Claude to
+ask — the contents leak. The ask rule trusts your every click;
+scenarios 1 and 2 already showed why that's fragile. Scenario 3's point
+is what `excludedCommands` + `denyRead` add that permissions can't: a
+shape where listing works, reading can't happen, and approval can't
+change that.
 
 **What the agent can do:**
 
@@ -308,34 +318,39 @@ The sandbox block:
 
 - `cat sensitive/customer-data.csv` → ask; if approved, sandbox `EACCES`
 - `python3 -c 'open("sensitive/...")'` → ask; if approved, sandbox `EACCES`
-- `Read` tool on any `sensitive/` file → permission deny (the Read tool
-  runs in-process and the sandbox doesn't touch it — the permission
-  rule is what blocks it)
+- `Read` tool on any `sensitive/` file → permission deny
 
 **Try it:**
 
 ```bash
-# Both variants: listing works
-task demo:sensitive          # without-sandbox
-task demo:sensitive:sandbox  # with-sandbox
-# → ls sensitive/ returns filenames
+cd with-sandbox
+claude -p "List the files under sensitive/. Do not read their contents."
+# → ls sensitive/ returns filenames, contents stay closed
 
-# The contrast: approve a content-read bypass
-task demo:sensitive:read:sandbox
-# → python3 open() asks; approve → sandbox EACCES
+claude "Run: python3 -c 'print(open(\"sensitive/customer-data.csv\").read())'"
+# → ask prompt; approve → sandbox EACCES at the OS
 ```
-
-In without-sandbox the same approval would succeed and leak the file.
 
 > **The gotcha:** "search contents without seeing contents" has no
 > clean primitive. `grep` (without `-l`) prints matching lines, which
-> is a read — sandbox blocks it inside `sensitive/`. If you really need
-> content-search, you either approve a specific command (and accept
-> the leak) or build an indexed search outside the agent's reach.
+> *is* a read — sandbox blocks it inside `sensitive/`. If you really
+> need content-search, you either approve a specific command (and
+> accept the leak) or build an indexed search outside the agent's
+> reach.
 
-### Scenario 4 — `./restricted/**` requires an explicit OK
+### Scenario 4 — when Claude needs to peek to rename
 
 ![Scenario 4 diagram](diagrams/permissions/4-restricted-ask.svg)
+
+Continuing from scenario 3: renaming by filename works great for
+`2024-01-03 trip to kyoto.md`. It falls apart for `IMG_4821.jpg`,
+`Scan_20240103_001.pdf`, `Untitled.md`, and `Note 3 (copy) (final).txt`.
+To rename those meaningfully, Claude has to look inside. You want that
+to happen — but you want to stay in the loop on each peek.
+
+This is what `ask` is for. Not a blanket "yes, read anything in this
+folder" — one prompt per file, so you can wave through the boring
+scans and skip the ones you know are personal.
 
 The rule:
 
@@ -343,25 +358,31 @@ The rule:
 "ask": ["Read(./restricted/**)"]
 ```
 
-When the agent tries to `Read` a file in `restricted/`, Claude Code pops a
-prompt: *"Allow Read(./restricted/deploy-config.json)?"* You choose:
+When the agent tries to `Read` a file under `restricted/`, Claude Code
+pops a prompt: *"Allow Read(./restricted/Scan_20240103_001.pdf)?"* You
+choose:
 
-- **Yes** — allow this one call
-- **Yes, and don't ask again** — promotes it to `allow` for the session (or
-  permanently, depending on which option you pick)
-- **No** — blocks it, and the agent gets an error it can react to
+- **Yes** — allow this one call.
+- **Yes, and don't ask again** — promotes it to `allow` for the session
+  (or permanently, depending on which option you pick). The speed bump
+  goes away after this — use sparingly, and never for a folder you
+  haven't already surveyed.
+- **No** — blocks it; the agent sees an error and moves on to the
+  next file.
 
-This is the right setting for files that are usually fine to read but that
-you want a speed bump on — deploy configs, internal notes, anything where
-you want to stay in the loop.
+The same shape fits anything where "usually fine to read, but I want to
+know" is the policy: deploy configs, team notes, meeting transcripts,
+runbooks. `ask` turns the file access itself into a visible event in
+the conversation — you can catch a prompt-injected file steering
+Claude toward things it doesn't need.
 
 **Try it** (note: no `-p` flag — we want interactive mode so you see the
-approve/deny dialog; headless mode would auto-deny and skip the interesting
+approve/deny dialog; headless would auto-deny and skip the interesting
 part):
 
 ```bash
 cd without-sandbox    # same in with-sandbox
-claude "Summarize restricted/team-notes.md"
+claude "Look at restricted/team-notes.md and propose a better filename based on its contents."
 ```
 
 ## File layout
