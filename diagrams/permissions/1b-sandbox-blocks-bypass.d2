@@ -1,0 +1,50 @@
+...@../_shared
+...@../_scenario-base
+
+title: |md
+  # Scenario 1b: OS sandbox catches what permissions miss
+| {
+  near: top-center
+  shape: text
+}
+
+
+prompt: "Run: python3 -c\n'print(open(\".env\").read())'"
+file: ".env"
+
+gate: {
+  perm.rules: |`json
+    "deny": [
+      "Read(./.env)",
+      "Bash(*.env)",
+      "Bash(* .env *)"
+    ]
+  `|
+
+  sand.rules: |`json
+    "sandbox": {
+      "enabled": true,
+      "filesystem": {
+        "denyRead": [
+          "./.env",
+          "**/.env"
+        ]
+      }
+    }
+  `|
+
+  perm -> sand: "✓ no match → passes" { class: flow-edge }
+}
+
+aside: |md
+  python3 -c '...' isn't
+  matched by any deny rule.
+  Sandbox intercepts
+  open(".env") at the
+  syscall, returning EACCES.
+| {
+  shape: text
+}
+
+prompt -> gate.perm: "Bash: python3 -c ..." { class: flow-edge }
+gate.sand -> file: "✗ EACCES" { class: deny-edge }

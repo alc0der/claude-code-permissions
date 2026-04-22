@@ -1,0 +1,35 @@
+...@../_shared
+...@../_scenario-base
+
+title: |md
+  # Scenario 4: restricted/** requires your OK
+| {
+  near: top-center
+  shape: text
+}
+
+prompt: "Summarize\nrestricted/team-notes.md"
+file: "restricted/team-notes.md"
+
+gate: {
+  perm.rules: |`json
+    "ask": [
+      "Read(./restricted/**)"
+    ]
+  `|
+
+  sand.off: |md
+    (no sandbox)
+  |
+  sand.style.opacity: 0.35
+
+  perm -> sand: "? awaits approval" { style.stroke: "#cc9900" }
+}
+
+prompt -> gate.perm: "Read(./restricted/team-notes.md)" { class: flow-edge }
+gate.sand -> file: "if approved: ✓ reads" { class: flow-edge }
+
+gate.perm -> prompt: "prompts: allow?" {
+  class: flow-edge
+  style.stroke: "#cc9900"
+}

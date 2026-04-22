@@ -1,0 +1,41 @@
+...@../_shared
+...@../_scenario-base
+
+title: |md
+  # Scenario 1: .env denied at the permissions layer
+| {
+  near: top-center
+  shape: text
+}
+
+prompt: "Read the .env file\nand tell me what's in it."
+file: ".env"
+
+gate: {
+  perm.rules: |`json
+    "deny": [
+      "Read(./.env)",
+      "Bash(*.env)",
+      "Bash(* .env *)"
+    ]
+  `|
+
+  sand.off: |md
+    (no sandbox)
+  |
+  sand.style.opacity: 0.35
+
+  perm -> sand: "✗ Read(./.env) deny" { class: deny-edge }
+}
+
+aside: |md
+  Blind spot:
+  python3 -c '...open(".env")...'
+  slips pattern matching;
+  falls to ask. See 1b.
+| {
+  shape: text
+}
+
+prompt -> gate.perm: "Read(./.env)" { class: flow-edge }
+gate.sand -> file: "not reached" { class: muted-edge }

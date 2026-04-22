@@ -1,0 +1,55 @@
+...@../_shared
+...@../_scenario-base
+
+title: |md
+  # Scenario 3: sensitive/** listable, not readable
+| {
+  near: top-center
+  shape: text
+}
+
+prompt: "List files\nunder sensitive/."
+file: "sensitive/customer-data.csv"
+
+gate: {
+  perm.rules: |`json
+    "deny":  ["Read(./sensitive/**)"],
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(tree:*)"
+    ],
+    "ask":   ["Bash(*)"]
+  `|
+
+  sand.rules: |`json
+    "sandbox": {
+      "enabled": true,
+      "filesystem": {
+        "denyRead": ["./sensitive/**"]
+      },
+      "excludedCommands": [
+        "ls", "ls *",
+        "tree", "tree *"
+      ]
+    }
+  `|
+
+  perm -> sand: "✓ allow → excluded" { class: flow-edge }
+}
+
+aside: |md
+  ls/tree are whitelisted
+  via excludedCommands.
+  They run outside the
+  sandbox, so readdir works.
+  A cat/python3 -c bypass
+  would be asked; even if
+  you approve, the subprocess
+  runs inside the sandbox
+  and hits EACCES on open().
+| {
+  shape: text
+}
+
+prompt -> gate.perm: "Bash: ls sensitive/" { class: flow-edge }
+gate.sand -> file: "✓ names only" { class: flow-edge }

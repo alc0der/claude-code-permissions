@@ -8,16 +8,22 @@ tasks:
     silent: true
 
   diagrams:
-    desc: Regenerate scenario SVGs (light + dark embedded in one file)
+    desc: Regenerate index + per-scenario SVGs (light + dark embedded in one file)
     dir: diagrams
     cmds:
-      - d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg
+      - d2 --theme 0 --dark-theme 200 --pad=30 --scale=0.9 index.d2 index.svg
+      - d2 --theme 0 --dark-theme 200 permissions/1-deny-env.d2 permissions/1-deny-env.svg
+      - d2 --theme 0 --dark-theme 200 permissions/1b-sandbox-blocks-bypass.d2 permissions/1b-sandbox-blocks-bypass.svg
+      - d2 --theme 0 --dark-theme 200 permissions/2-deny-innocuous.d2 permissions/2-deny-innocuous.svg
+      - d2 --theme 0 --dark-theme 200 permissions/3-sensitive-list-only.d2 permissions/3-sensitive-list-only.svg
+      - d2 --theme 0 --dark-theme 200 permissions/4-restricted-ask.d2 permissions/4-restricted-ask.svg
+      - d2 --theme 0 --dark-theme 200 permissions/5-nested-inherits.d2 permissions/5-nested-inherits.svg
 
   diagrams:watch:
-    desc: Watch for changes and regenerate SVGs automatically
+    desc: Watch the overview (index.d2) and regenerate on change. Per-scenario files watch one at a time.
     dir: diagrams
     cmds:
-      - d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg --watch
+      - d2 --theme 0 --dark-theme 200 --pad=30 --scale=0.9 index.d2 index.svg --watch
 
   demo:env:
     desc: "Scenario 1 (no sandbox) — try to read .env"

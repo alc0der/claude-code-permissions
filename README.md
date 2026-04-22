@@ -19,6 +19,8 @@ demos apply.
 
 ## How the permission system works (30-second version)
 
+![Overview — how Claude Code permissions and sandbox complement each other](diagrams/index.svg)
+
 Every tool call the agent makes (`Read`, `Write`, `Bash(ls ...)`, etc.) is
 checked against three lists in `settings.json`:
 
@@ -450,15 +452,16 @@ trusting the rules.
 README.md                ← you are here (authoring: orients learners)
 Taskfile.yml             ← author + demo tasks (tasks `cd` into subdirs)
 diagrams/                ← D2 source + exported SVGs (authoring)
-  permissions.d2
+  _shared.d2             ← reusable classes (code-step, deny-edge, ...)
+  _scenario-base.d2      ← shared User→Claude→permissions→sandbox→file skeleton
+  index.d2 / index.svg   ← overview (top of README)
   permissions/
-    1-deny-env.svg
-    1b-sandbox-blocks-bypass.svg
-    2-deny-innocuous.svg
-    3-sensitive-list-only.svg
-    4-restricted-ask.svg
-    5-nested-inherits.svg
-    index.svg            ← base diagram (no scenario applied)
+    1-deny-env.d2        / 1-deny-env.svg
+    1b-sandbox-blocks-bypass.d2 / 1b-sandbox-blocks-bypass.svg
+    2-deny-innocuous.d2  / 2-deny-innocuous.svg
+    3-sensitive-list-only.d2 / 3-sensitive-list-only.svg
+    4-restricted-ask.d2  / 4-restricted-ask.svg
+    5-nested-inherits.d2 / 5-nested-inherits.svg
 without-sandbox/         ← learner runs `cd without-sandbox && claude ...`
   .claude/settings.json
   .env, .env.example, app-config.yaml
@@ -474,18 +477,16 @@ with-sandbox/            ← same targets, sandbox-enabled settings
 
 ## Regenerating the diagrams
 
-Run `task diagrams` from the repo root — a thin wrapper around:
+Run `task diagrams` from the repo root. It renders `index.d2` and each
+per-scenario source under `diagrams/permissions/*.d2` to its sibling `.svg`.
 
-```bash
-cd diagrams
-d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg
-```
+Each scenario is its own self-contained file. Shared styling lives in
+`_shared.d2` (classes like `code-step`, `deny-edge`, `flow-edge`); the common
+`User → Claude → permissions → sandbox → file` skeleton lives in
+`_scenario-base.d2`. Both are pulled in via D2's spread-import (`...@_shared`).
 
-D2 detects the `scenarios:` block in the source and exports one SVG per
-scenario into `diagrams/permissions/`, plus an `index.svg` for the base.
 `--theme 0` (neutral light) paired with `--dark-theme 200` (dark mauve)
-embeds both variants in each file; the viewer's `prefers-color-scheme`
-picks.
+embeds both variants in each file; the viewer's `prefers-color-scheme` picks.
 
 Arrows are marked `animated: true` so they flow in the direction of the tool
 call in browsers that render SVG CSS animation.

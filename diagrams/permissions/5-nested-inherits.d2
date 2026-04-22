@@ -1,0 +1,36 @@
+grid-columns: 3
+
+...@../_shared
+...@../_scenario-base
+
+title: |md
+  # Scenario 5: running claude from a nested subdir skips the parent's .claude/
+| {
+  near: top-center
+  shape: text
+}
+
+prompt: "Read .env\n(from with-sandbox/nested/)"
+file: "nested/.env"
+
+gate: running claude from a nested subdir skips the parent's .claude/ {
+  perm.rules: |`yaml
+    (no rules loaded)
+    CWD: with-sandbox/nested/
+    has no .claude/ of its own;
+    parent .claude/ is not merged.
+  `|
+
+  sand.off: |md
+    (sandbox also not loaded)
+  |
+  sand.style.opacity: 0.35
+
+  perm -> sand
+}
+
+prompt -> gate.perm: "Read(./.env)" { class: flow-edge }
+gate.sand -> file: "✓ reads (secret leaks)" {
+  class: flow-edge
+  style.stroke: "#cc9900"
+}

@@ -1,0 +1,82 @@
+...@_shared
+
+grid-rows: 5
+grid-columns: 3
+vertical-gap: 100
+horizontal-gap: 120
+
+# Title row
+key-prompt: "How Claude Code\npermissions and sandbox\ncompliment each other?" {
+  class: title-callout
+}
+key-gate: ".claude/settings.json" {
+  direction: right
+  class: header-outline
+  key-perm: "permissions\nsection" { class: [code-step; header-outline] }
+  key-sand: "sandbox\nsection" { class: [code-step; header-outline] }
+  key-perm -> key-sand
+}
+key-file: "by\nAhmad Akilan" { class: [target-file; header-outline] }
+
+key-prompt -> key-gate { class: flow-edge }
+key-gate.key-sand -> key-file
+
+# Scenario 1 — .env denied at permissions (no sandbox)
+u-1: @permissions/1-deny-env.prompt
+u-1: "Read .env\n please"
+gate-1: @permissions/1-deny-env.gate
+gate-1.perm.rules: null
+gate-1.perm: "deny:\n- Read(.env)"
+gate-1.perm.class: code-step
+gate-1.sand.off: null
+gate-1.sand: "sandbox"
+gate-1.sand.class: code-step
+file-1: ".env" { class: target-file }
+
+u-1 -> gate-1.perm: "Read(.env)" { class: flow-edge }
+gate-1.sand -> file-1: "not reached" { class: muted-edge }
+
+# Scenario 1b — OS sandbox catches what permissions miss
+u-1b: @permissions/1b-sandbox-blocks-bypass.prompt
+u-1b: "Run:\npython3 -c\n'open(.env)'"
+gate-1b: @permissions/1b-sandbox-blocks-bypass.gate
+gate-1b.perm.rules: null
+gate-1b.perm: "deny:\n- Read(.env)"
+gate-1b.perm.class: code-step
+gate-1b.sand.rules: null
+gate-1b.sand: denyRead:\n- "**/.env"
+gate-1b.sand.class: code-step
+file-1b: ".env" { class: target-file }
+
+u-1b -> gate-1b.perm: "Bash:\npython3 -c ..." { class: flow-edge }
+gate-1b.sand -> file-1b: "✗ EACCES" { class: deny-edge }
+
+# Scenario 2 — sandbox backstops config.yml
+u-2: @permissions/2-deny-innocuous.prompt
+u-2: "Run:\npython3 -c\n'open(config.yml)'"
+gate-2: @permissions/2-deny-innocuous.gate
+gate-2.perm.rules: null
+gate-2.perm: "deny:\n- Read(config.yml)"
+gate-2.perm.class: code-step
+gate-2.sand.rules: null
+gate-2.sand: "denyRead:\n- config.yml"
+gate-2.sand.class: code-step
+file-2: "config.yml" { class: target-file }
+
+u-2 -> gate-2.perm: "Bash:\npython3 -c ..." { class: flow-edge }
+gate-2.sand -> file-2: "✗ EACCES" { class: deny-edge }
+
+# Scenario 3 — pii/** listable, not readable
+u-3: @permissions/3-sensitive-list-only.prompt
+u-3: "List files\nunder pii/."
+gate-3: @permissions/3-sensitive-list-only.gate
+gate-3.perm.rules: null
+gate-3.perm: "deny:\n- Read(pii/**)"
+gate-3.perm.class: code-step
+gate-3.sand.rules: null
+gate-3.sand: "excludedCommands:\n- ls\n- tree"
+gate-3.sand.class: code-step
+file-3: "pii/users.csv" { class: target-file }
+
+u-3 -> gate-3.perm: "Bash:\nls pii/" { class: flow-edge }
+gate-3.sand -> file-3: "✓ names only"
