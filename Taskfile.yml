@@ -1,0 +1,78 @@
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  diagrams:
+    desc: Regenerate scenario SVGs (light + dark embedded in one file)
+    dir: diagrams
+    cmds:
+      - d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg
+
+  demo:env:
+    desc: "Scenario 1 (no sandbox) — try to read .env"
+    dir: without-sandbox
+    cmds:
+      - claude -p "Read the .env file and tell me what's in it."
+
+  demo:env:old-bypass:
+    desc: "Scenario 1 — legacy bypass (awk + $var). Caught now; filter parses shell."
+    dir: without-sandbox
+    cmds:
+      - 'claude -p "Run this exact shell command and show the output: f=.env && awk 1 $$f"'
+
+  demo:env:bypass:
+    desc: "Scenario 1 (no sandbox) — python subprocess slips past the deny list"
+    dir: without-sandbox
+    interactive: true
+    cmds:
+      - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\".env\").read())''"'
+
+  demo:env:sandbox:
+    desc: "Scenario 1 (sandbox on) — the same python slip gets EACCES'd at the OS"
+    dir: with-sandbox
+    interactive: true
+    cmds:
+      - 'claude "Run this exact shell command and show the output: python3 -c ''print(open(\".env\").read())''"'
+
+  demo:config:
+    desc: "Scenario 2 — try to read app-config.yaml (blocked, same rule shape)"
+    dir: without-sandbox
+    cmds:
+      - claude -p "Read app-config.yaml and tell me which port the app runs on."
+
+  demo:config:sandbox:
+    desc: "Scenario 2 (sandbox on) — same deny, plus OS-level denyRead"
+    dir: with-sandbox
+    cmds:
+      - claude -p "Read app-config.yaml and tell me which port the app runs on."
+
+  demo:sensitive:
+    desc: "Scenario 3 — list sensitive/ without reading contents"
+    dir: without-sandbox
+    cmds:
+      - claude -p "List the files under sensitive/ and count the lines in each. Do not read their contents."
+
+  demo:sensitive:sandbox:
+    desc: "Scenario 3 (sandbox on) — list-only still works; read is OS-blocked"
+    dir: with-sandbox
+    cmds:
+      - claude -p "List the files under sensitive/ and count the lines in each. Do not read their contents."
+
+  demo:restricted:
+    desc: "Scenario 4 — ask prompt for restricted/ (interactive)"
+    dir: without-sandbox
+    cmds:
+      - claude "Summarize restricted/team-notes.md"
+    interactive: true
+
+  demo:restricted:sandbox:
+    desc: "Scenario 4 (sandbox on) — same ask prompt (sandbox doesn't gate Read tool)"
+    dir: with-sandbox
+    cmds:
+      - claude "Summarize restricted/team-notes.md"
+    interactive: true

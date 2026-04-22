@@ -1,0 +1,207 @@
+direction: right
+
+u: User {
+  shape: person
+}
+
+claude: Claude {
+  filter
+}
+
+file: file {
+  shape: document
+}
+
+rules: .claude/settings.json {
+  shape: document
+}
+
+u -> claude: "prompts" {
+  style.animated: true
+}
+claude -> file: "accesses" {
+  style.animated: true
+}
+
+scenarios: {
+  1-deny-env: {
+    title: |md
+      # Scenario 1 — `.env` denied by permission rules (fragile)
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: ".env"
+
+    rules.deny_read: |`json
+      "deny": [
+        "Read(./.env)",
+        "Read(./.env.*)",
+        "Read(**/.env)",
+        "Read(**/.env.*)"
+      ]
+    `|
+    rules.deny_bash: |`json
+      "deny": [
+        "Bash(*.env)",
+        "Bash(* .env *)"
+      ]
+    `|
+
+    bypass: |md
+      **Blind spot:** `python3 -c '...open(".env")...'`
+      Filter can't read inside `-c '…'`;
+      no pattern matches → falls to ask.
+      Interactive approve = leak.
+      → see scenario 1b.
+    | {
+      shape: text
+    }
+
+    (u -> claude)[0]: "Read the .env file and tell me what's in it."
+    (claude -> file)[0]: "✗ blocked"
+
+    claude.filter -> rules.deny_bash: "matches *.env" {
+      style.animated: true
+    }
+    claude.filter -> rules.deny_read: "covers Read tool" {
+      style.animated: true
+    }
+  }
+
+  1b-sandbox-blocks-bypass: {
+    title: |md
+      # Scenario 1b — OS sandbox catches what permissions miss
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: ".env"
+
+    sandbox: OS sandbox {
+      shape: hexagon
+      style.fill: "#ffe0e0"
+    }
+
+    rules.sandbox: |`json
+      "sandbox": {
+        "enabled": true,
+        "filesystem": {
+          "denyRead": [
+            "./.env",
+            "**/.env"
+          ]
+        }
+      }
+    `|
+
+    narrative: |md
+      Same slip: `python3 -c '...'`.
+      Permission filter: can't see inside
+      `-c`; would ask. Subprocess spawns →
+      sandbox intercepts `open(".env")`
+      and returns EACCES.
+      Wall, not guardrail.
+    | {
+      shape: text
+    }
+
+    (u -> claude)[0]: "Run: python3 -c 'print(open(\".env\").read())'"
+    (claude -> file)[0]: "✗ EACCES"
+
+    claude -> sandbox: "subprocess syscalls" {
+      style.animated: true
+    }
+    sandbox -> rules.sandbox: "denyRead by path" {
+      style.animated: true
+    }
+  }
+
+  2-deny-innocuous: {
+    title: |md
+      # Scenario 2 — `app-config.yaml` denied the same way
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: "app-config.yaml"
+
+    rules.deny: |`json
+      "deny": [
+        "Read(./app-config.yaml)"
+      ]
+    `|
+
+    (u -> claude)[0]: "Read app-config.yaml and tell me which port the app runs on."
+    (claude -> file)[0]: "✗ blocked"
+
+    claude.filter -> rules.deny: "matches" {
+      style.animated: true
+    }
+  }
+
+  3-sensitive-list-only: {
+    title: |md
+      # Scenario 3 — `sensitive/**` listable, not readable
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: "sensitive/customer-data.csv"
+
+    rules.deny_read: |`json
+      "deny": [
+        "Read(./sensitive/**)"
+      ]
+    `|
+    rules.allow_list: |`json
+      "allow": [
+        "Bash(ls:*)",
+        "Bash(find:*)",
+        "Bash(grep -l:*)",
+        "Bash(wc:*)"
+      ]
+    `|
+
+    (u -> claude)[0]: "List files under sensitive/ and count the lines in each."
+    (claude -> file)[0]: "✓ names, sizes"
+
+    claude.filter -> rules.allow_list: "allows ls/find/wc" {
+      style.animated: true
+    }
+    claude.filter -> rules.deny_read: "would block Read" {
+      style.animated: true
+    }
+  }
+
+  4-restricted-ask: {
+    title: |md
+      # Scenario 4 — `restricted/**` requires your OK
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: "restricted/team-notes.md"
+
+    rules.ask: |`json
+      "ask": [
+        "Read(./restricted/**)"
+      ]
+    `|
+
+    (u -> claude)[0]: "Summarize restricted/team-notes.md"
+    (claude -> file)[0]: "? awaits approval"
+
+    claude.filter -> rules.ask: "matches" {
+      style.animated: true
+    }
+    rules -> u: "prompts: allow?" {
+      style.animated: true
+    }
+  }
+}

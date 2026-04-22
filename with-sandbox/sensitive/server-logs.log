@@ -1,0 +1,5 @@
+2026-04-22T09:14:02Z INFO  auth login user=ada@example.com ip=10.0.0.42
+2026-04-22T09:14:58Z WARN  rate-limit user=1002 endpoint=/api/v1/search
+2026-04-22T09:15:11Z ERROR db-timeout query_id=q_8812 took_ms=5003
+2026-04-22T09:15:44Z INFO  billing stripe_event=ch_FAKE_ok_123 amount_cents=9900
+2026-04-22T09:16:02Z INFO  auth logout user=ada@example.com

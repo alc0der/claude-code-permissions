@@ -1,0 +1,10 @@
+{
+  "environment": "staging",
+  "region": "eu-west-1",
+  "replicas": 3,
+  "image": "ghcr.io/demo/app:v2.14.0",
+  "feature_flags": {
+    "new_checkout_flow": true,
+    "ai_support_agent": false
+  }
+}

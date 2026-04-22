@@ -1,0 +1,6 @@
+This is a freely readable file.
+
+Anything under ./public/** is explicitly allowed in .claude/settings.json,
+so the agent can read it without asking you.
+
+Nothing sensitive here — just a baseline to contrast with the other folders.
