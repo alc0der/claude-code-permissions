@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 tasks:
   default:
@@ -12,6 +12,12 @@ tasks:
     dir: diagrams
     cmds:
       - d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg
+
+  diagrams:watch:
+    desc: Watch for changes and regenerate SVGs automatically
+    dir: diagrams
+    cmds:
+      - d2 --theme 0 --dark-theme 200 permissions.d2 permissions.svg --watch
 
   demo:env:
     desc: "Scenario 1 (no sandbox) — try to read .env"

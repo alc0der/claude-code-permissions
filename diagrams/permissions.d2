@@ -4,29 +4,37 @@ u: User {
   shape: person
 }
 
-claude: Claude {
-  filter
+claude: Claude
+
+permissions: permissions {
+  shape: step
+}
+
+sandbox: sandbox {
+  shape: step
 }
 
 file: file {
   shape: document
 }
 
-rules: .claude/settings.json {
-  shape: document
-}
-
-u -> claude: "prompts" {
+u -> claude: "prompt" {
   style.animated: true
 }
-claude -> file: "accesses" {
+claude -> permissions: "tool call" {
+  style.animated: true
+}
+permissions -> sandbox: "passes" {
+  style.animated: true
+}
+sandbox -> file: "opens" {
   style.animated: true
 }
 
 scenarios: {
   1-deny-env: {
     title: |md
-      # Scenario 1 — `.env` denied by permission rules (fragile)
+      # Scenario 1 — `.env` denied at the permissions layer
     | {
       near: top-center
       shape: text
@@ -34,43 +42,42 @@ scenarios: {
 
     file: ".env"
 
-    rules.deny_read: |`json
+    permissions.rules: |`json
       "deny": [
         "Read(./.env)",
-        "Read(./.env.*)",
-        "Read(**/.env)",
-        "Read(**/.env.*)"
-      ]
-    `|
-    rules.deny_bash: |`json
-      "deny": [
         "Bash(*.env)",
         "Bash(* .env *)"
       ]
     `|
 
-    bypass: |md
-      **Blind spot:** `python3 -c '...open(".env")...'`
-      Filter can't read inside `-c '…'`;
-      no pattern matches → falls to ask.
-      Interactive approve = leak.
-      → see scenario 1b.
+    sandbox.off: |md
+      *(no sandbox)*
+    |
+    sandbox.style.opacity: 0.35
+
+    aside: |md
+      **Blind spot:**
+      `python3 -c '...open(".env")...'`
+      slips pattern matching;
+      falls to ask. → see 1b.
     | {
       shape: text
     }
 
     (u -> claude)[0]: "Read the .env file and tell me what's in it."
-    (claude -> file)[0]: "✗ blocked"
-
-    claude.filter -> rules.deny_bash: "matches *.env" {
-      style.animated: true
+    (claude -> permissions)[0]: "Read(./.env)"
+    (permissions -> sandbox)[0]: "✗ Read(./.env) deny" {
+      style.stroke: "#cc0000"
     }
-    claude.filter -> rules.deny_read: "covers Read tool" {
-      style.animated: true
+    (sandbox -> file)[0]: "not reached" {
+      style.stroke: "#cccccc"
+      style.animated: false
     }
+    direction: right
   }
 
   1b-sandbox-blocks-bypass: {
+    direction: right
     title: |md
       # Scenario 1b — OS sandbox catches what permissions miss
     | {
@@ -80,12 +87,15 @@ scenarios: {
 
     file: ".env"
 
-    sandbox: OS sandbox {
-      shape: hexagon
-      style.fill: "#ffe0e0"
-    }
+    permissions.rules: |`json
+      "deny": [
+        "Read(./.env)",
+        "Bash(*.env)",
+        "Bash(* .env *)"
+      ]
+    `|
 
-    rules.sandbox: |`json
+    sandbox.rules: |`json
       "sandbox": {
         "enabled": true,
         "filesystem": {
@@ -97,29 +107,26 @@ scenarios: {
       }
     `|
 
-    narrative: |md
-      Same slip: `python3 -c '...'`.
-      Permission filter: can't see inside
-      `-c`; would ask. Subprocess spawns →
-      sandbox intercepts `open(".env")`
-      and returns EACCES.
-      Wall, not guardrail.
+    aside: |md
+      `python3 -c '...'` isn't
+      matched by any deny rule.
+      Sandbox intercepts
+      `open(".env")` at the
+      syscall → `EACCES`.
     | {
       shape: text
     }
 
     (u -> claude)[0]: "Run: python3 -c 'print(open(\".env\").read())'"
-    (claude -> file)[0]: "✗ EACCES"
-
-    claude -> sandbox: "subprocess syscalls" {
-      style.animated: true
-    }
-    sandbox -> rules.sandbox: "denyRead by path" {
-      style.animated: true
+    (claude -> permissions)[0]: "Bash: python3 -c ..."
+    (permissions -> sandbox)[0]: "✓ no match → passes"
+    (sandbox -> file)[0]: "✗ EACCES" {
+      style.stroke: "#cc0000"
     }
   }
 
   2-deny-innocuous: {
+    direction: right
     title: |md
       # Scenario 2 — `app-config.yaml` denied the same way
     | {
@@ -129,21 +136,30 @@ scenarios: {
 
     file: "app-config.yaml"
 
-    rules.deny: |`json
+    permissions.rules: |`json
       "deny": [
         "Read(./app-config.yaml)"
       ]
     `|
 
-    (u -> claude)[0]: "Read app-config.yaml and tell me which port the app runs on."
-    (claude -> file)[0]: "✗ blocked"
+    sandbox.off: |md
+      *(no sandbox)*
+    |
+    sandbox.style.opacity: 0.35
 
-    claude.filter -> rules.deny: "matches" {
-      style.animated: true
+    (u -> claude)[0]: "Read app-config.yaml and tell me which port the app runs on."
+    (claude -> permissions)[0]: "Read(./app-config.yaml)"
+    (permissions -> sandbox)[0]: "✗ matches deny" {
+      style.stroke: "#cc0000"
+    }
+    (sandbox -> file)[0]: "not reached" {
+      style.stroke: "#cccccc"
+      style.animated: false
     }
   }
 
   3-sensitive-list-only: {
+    direction: right
     title: |md
       # Scenario 3 — `sensitive/**` listable, not readable
     | {
@@ -153,12 +169,8 @@ scenarios: {
 
     file: "sensitive/customer-data.csv"
 
-    rules.deny_read: |`json
-      "deny": [
-        "Read(./sensitive/**)"
-      ]
-    `|
-    rules.allow_list: |`json
+    permissions.rules: |`json
+      "deny":  ["Read(./sensitive/**)"],
       "allow": [
         "Bash(ls:*)",
         "Bash(find:*)",
@@ -167,18 +179,19 @@ scenarios: {
       ]
     `|
 
-    (u -> claude)[0]: "List files under sensitive/ and count the lines in each."
-    (claude -> file)[0]: "✓ names, sizes"
+    sandbox.off: |md
+      *(no sandbox)*
+    |
+    sandbox.style.opacity: 0.35
 
-    claude.filter -> rules.allow_list: "allows ls/find/wc" {
-      style.animated: true
-    }
-    claude.filter -> rules.deny_read: "would block Read" {
-      style.animated: true
-    }
+    (u -> claude)[0]: "List files under sensitive/ and count lines in each."
+    (claude -> permissions)[0]: "Bash: ls sensitive/"
+    (permissions -> sandbox)[0]: "✓ matches allow"
+    (sandbox -> file)[0]: "✓ names + sizes"
   }
 
   4-restricted-ask: {
+    direction: right
     title: |md
       # Scenario 4 — `restricted/**` requires your OK
     | {
@@ -188,20 +201,27 @@ scenarios: {
 
     file: "restricted/team-notes.md"
 
-    rules.ask: |`json
+    permissions.rules: |`json
       "ask": [
         "Read(./restricted/**)"
       ]
     `|
 
-    (u -> claude)[0]: "Summarize restricted/team-notes.md"
-    (claude -> file)[0]: "? awaits approval"
+    sandbox.off: |md
+      *(no sandbox)*
+    |
+    sandbox.style.opacity: 0.35
 
-    claude.filter -> rules.ask: "matches" {
-      style.animated: true
+    (u -> claude)[0]: "Summarize restricted/team-notes.md"
+    (claude -> permissions)[0]: "Read(./restricted/team-notes.md)"
+    (permissions -> sandbox)[0]: "? awaits approval" {
+      style.stroke: "#cc9900"
     }
-    rules -> u: "prompts: allow?" {
+    (sandbox -> file)[0]: "if approved: ✓ reads"
+
+    permissions -> u: "prompts: allow?" {
       style.animated: true
+      style.stroke: "#cc9900"
     }
   }
 }
