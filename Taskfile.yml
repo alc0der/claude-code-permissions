@@ -91,3 +91,9 @@ tasks:
     cmds:
       - claude "Summarize restricted/team-notes.md"
     interactive: true
+
+  demo:nested:leak:
+    desc: "Scenario 5 — from nested/, parent with-sandbox/.claude/ doesn't load; .env leaks"
+    dir: with-sandbox/nested
+    cmds:
+      - claude -p "Read the .env file and tell me what's in it."

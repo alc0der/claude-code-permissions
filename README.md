@@ -385,6 +385,65 @@ cd without-sandbox    # same in with-sandbox
 claude "Look at restricted/team-notes.md and propose a better filename based on its contents."
 ```
 
+### Scenario 5 — running `claude` from a nested subdir skips the parent's `.claude/`
+
+![Scenario 5 diagram](diagrams/permissions/5-nested-inherits.svg)
+
+You set up `.claude/settings.json` in a project directory with deny
+rules on secrets. Later, you `cd` one level deeper to work on
+something and run `claude` from there — naturally expecting the
+project rules still apply. They don't, and you only notice when
+Claude cheerfully reads `.env` back to you.
+
+The gotcha: **Claude Code picks a single project scope per session,
+not a chain.** When your CWD has no `.claude/` of its own, Claude
+does **not** walk up through every enclosing directory merging each
+`.claude/settings.json` it finds along the way. Don't assume which
+scope wins — verify it.
+
+In this repo:
+
+```
+with-sandbox/
+├── .claude/settings.json   ← rules active when CWD is with-sandbox/
+└── nested/
+    └── .env                ← from nested/, those rules do NOT load
+```
+
+**Try it:**
+
+```bash
+cd with-sandbox
+claude -p "Read the .env file and tell me what's in it."
+# → "has been denied" — with-sandbox/.claude/ is the project scope
+
+cd nested && pwd
+# → .../with-sandbox/nested   (one level deeper, no .claude/ here)
+claude -p "Read the .env file and tell me what's in it."
+# → Claude reads it. with-sandbox/.claude/ is no longer active.
+```
+
+The `Read` tool isn't the only thing you lose — the sandbox block
+lives in the same settings file, so the OS-level `denyRead` wall
+from scenarios 1b/2/3 also stops working from `nested/`. Both
+defenses vanish together.
+
+**What to do about it:**
+
+- **Put `.claude/settings.json` in every directory you run Claude from.**
+  Explicit and predictable, at the cost of keeping them in sync.
+- **Run Claude from the directory that holds the rules.** If your
+  guardrails live at `./project/.claude/`, start Claude from
+  `./project/` — not from `./project/scripts/`.
+- **User settings.** Rules in `~/.claude/settings.json` follow you
+  everywhere on your machine. Good for personal deny lines ("never
+  read my SSH keys"); not shareable with teammates.
+
+The takeaway: **don't assume a parent directory's `.claude/` will
+cover your current working dir.** Start Claude interactively and
+run `/status` to see which settings files are actually loaded before
+trusting the rules.
+
 ## File layout
 
 ```
@@ -398,6 +457,7 @@ diagrams/                ← D2 source + exported SVGs (authoring)
     2-deny-innocuous.svg
     3-sensitive-list-only.svg
     4-restricted-ask.svg
+    5-nested-inherits.svg
     index.svg            ← base diagram (no scenario applied)
 without-sandbox/         ← learner runs `cd without-sandbox && claude ...`
   .claude/settings.json
@@ -408,6 +468,8 @@ without-sandbox/         ← learner runs `cd without-sandbox && claude ...`
 with-sandbox/            ← same targets, sandbox-enabled settings
   .claude/settings.json  ← permissions + sandbox block
   (same files as without-sandbox/)
+  nested/
+    .env                 ← scenario 5: no .claude/, inherits from parent
 ```
 
 ## Regenerating the diagrams

@@ -261,4 +261,67 @@ scenarios: {
       style.stroke: "#cc9900"
     }
   }
+
+  5-nested-inherits: {
+    direction: right
+    title: |md
+      # Scenario 5 — running `claude` from a nested subdir skips the parent's `.claude/`
+    | {
+      near: top-center
+      shape: text
+    }
+
+    file: "nested/.env"
+
+    permissions.rules: |`md
+      **CWD:** `with-sandbox/nested/`
+
+      No `.claude/` here. Claude
+      picks a single project scope
+      per session — it does **not**
+      walk up merging every
+      enclosing `.claude/` it finds.
+
+      The parent's rules:
+
+      ```json
+      "deny": ["Read(**/.env)", ...]
+      ```
+
+      …never load. Nothing protects
+      `.env` here.
+    `|
+
+    sandbox.rules: |`md
+      Sandbox config lives in the
+      same settings file — so the
+      OS-level `denyRead` wall also
+      isn't active from `nested/`.
+      Both defenses vanish together.
+    `|
+
+    aside: |md
+      Gotcha: rules at
+      `with-sandbox/.claude/` cover
+      `with-sandbox/` but **not**
+      `with-sandbox/nested/`.
+
+      Fix: put `.claude/settings.json`
+      in every dir you run Claude
+      from, or run Claude from the
+      dir that holds the rules. Run
+      `/status` to verify what loaded.
+    | {
+      shape: text
+    }
+
+    (u -> claude)[0]: "Read .env (from with-sandbox/nested/)"
+    (claude -> permissions)[0]: "Read(./.env)"
+    (permissions -> sandbox)[0]: "✓ no rule loaded → passes" {
+      style.stroke: "#cc9900"
+    }
+    (sandbox -> file)[0]: "✓ reads (secret leaks)" {
+      style.stroke: "#cc9900"
+    }
+  }
 }
