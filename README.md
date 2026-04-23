@@ -530,3 +530,12 @@ Then try prompts like `read .env`, `list sensitive/`, `wc -l sensitive/*.log`,
 `read restricted/team-notes.md`, `read public/welcome.txt` — each maps to one
 of the rules in the local `.claude/settings.json`. Re-run the same prompts
 in the other subdir to see how sandbox changes the outcome for the bypass.
+
+## Further reading
+
+- [Anthropic Engineering — Claude Code sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing):
+  the design goals and mechanics behind Seatbelt/bubblewrap integration,
+  from the team that built it.
+- [InventiveHQ — How to manage Claude Code permissions and sandboxing](https://inventivehq.com/knowledge-base/claude/how-to-manage-permissions-and-sandboxing):
+  a practitioner's walkthrough of the `settings.json` schema with
+  worked examples for common workflows.
