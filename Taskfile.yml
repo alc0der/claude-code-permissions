@@ -19,6 +19,17 @@ tasks:
       - d2 --theme 0 --dark-theme 200 permissions/4-restricted-ask.d2 permissions/4-restricted-ask.svg
       - d2 --theme 0 --dark-theme 200 permissions/5-nested-inherits.d2 permissions/5-nested-inherits.svg
 
+  diagrams:gif:
+    desc: Rasterize each animated SVG (overview + per-scenario) into a looping GIF
+    dir: diagrams
+    deps: [diagrams]
+    cmds:
+      - test -d node_modules/playwright || npm install --silent
+      - |
+        for svg in index.svg permissions/*.svg; do
+          node svg2gif.mjs "$svg" "${svg%.svg}.gif" 60 4933
+        done
+
   diagrams:watch:
     desc: Watch the overview (index.d2) and regenerate on change. Per-scenario files watch one at a time.
     dir: diagrams

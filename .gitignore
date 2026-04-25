@@ -1,2 +1,5 @@
 /.claude/
 .DS_Store
+diagrams/node_modules/
+diagrams/.frames/
+diagrams/package-lock.json

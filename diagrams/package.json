@@ -1,0 +1,9 @@
+{
+  "name": "diagrams-svg2gif",
+  "private": true,
+  "type": "module",
+  "description": "Local helper: rasterize an animated d2 SVG into a GIF via headless Chromium",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
