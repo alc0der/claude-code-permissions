@@ -25,9 +25,11 @@ tasks:
     deps: [diagrams]
     cmds:
       - test -d node_modules/playwright || npm install --silent
+      # Overview is taller; smaller width keeps file size reasonable.
+      - node svg2gif.mjs index.svg index.gif 15 4933 900 70
       - |
-        for svg in index.svg permissions/*.svg; do
-          node svg2gif.mjs "$svg" "${svg%.svg}.gif" 60 4933
+        for svg in permissions/*.svg; do
+          node svg2gif.mjs "$svg" "${svg%.svg}.gif"
         done
 
   diagrams:watch:

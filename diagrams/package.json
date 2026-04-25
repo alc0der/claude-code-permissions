@@ -2,7 +2,7 @@
   "name": "diagrams-svg2gif",
   "private": true,
   "type": "module",
-  "description": "Local helper: rasterize an animated d2 SVG into a GIF via headless Chromium",
+  "description": "Rasterize animated d2 SVGs into looping GIFs: Playwright (Chromium) records → ffmpeg extracts frames → gifski encodes. Orchestrated via `task diagrams:gif`. Requires `ffmpeg` and `gifski` on PATH (brew install ffmpeg gifski).",
   "dependencies": {
     "playwright": "^1.59.1"
   }
