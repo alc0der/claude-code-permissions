@@ -11,10 +11,7 @@
       "Read(./app-config.yaml)",
       "Read(./sensitive/**)"
     ],
-    "ask": [
-      "Read(./restricted/**)",
-      "Bash(*)"
-    ],
+    "ask": ["Read(./restricted/**)", "Bash(*)"],
     "allow": [
       "Read(./public/**)",
       "Read(./README.md)",
@@ -36,11 +33,7 @@
         "./sensitive/**"
       ]
     },
-    "excludedCommands": [
-      "ls",
-      "ls *",
-      "tree",
-      "tree *"
-    ]
+    "network": {},
+    "excludedCommands": ["ls", "ls *", "tree", "tree *"]
   }
 }
